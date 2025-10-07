@@ -18,16 +18,18 @@ public class PriceTrigger implements Trigger {
     }
 
     @Override
+    public boolean evaluate() {
+        double currentPrice = exchangeService.getMarketInfo(market).getCurrentPrice();
+        System.out.println("현재 가격: " + currentPrice + ", 목표 가격: " + targetPrice);
+        return currentPrice >= targetPrice;
+    }
+
+    @Override
     public void execute() {
         if (evaluate()) {
             action.execute();
         }
     }
 
-    @Override
-    public boolean evaluate() {
-        double currentPrice = exchangeService.getMarketInfo(market).getCurrentPrice();
-        System.out.println("현재 가격: " + currentPrice + ", 목표 가격: " + targetPrice);
-        return currentPrice >= targetPrice;
-    }
+
 }
