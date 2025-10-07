@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>간지나는 진행도 UI</title>
+  <style>
+    :root{
+      --bg:#0b0f14;
+      --card:#0f1621aa; /* glass */
+      --text:#e6eefc;
+      --muted:#a7b2c5;
+      --brand: #6aa6ff;
+      --brand2:#7b61ff;
+      --ok:#22c55e;
+      --warn:#f59e0b;
+      --err:#ef4444;
+      --glow: 0 0 30px rgba(123,97,255,.25), 0 0 60px rgba(106,166,255,.15);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background: radial-gradient(1200px 800px at 10% -10%,#1b2440,transparent),
+    radial-gradient(1000px 600px at 120% 10%,#151e2b,transparent),
+    linear-gradient(180deg,#0b0f14,#0b0f14 80%);
+      color:var(--text); font: 14px/1.5 Inter, Pretendard, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Apple SD Gothic Neo, sans-serif;
+      overflow-x:hidden;
+    }
+
+    /* 상단 스크롤 진행바 */
+    .scroll-progress{position:fixed; inset:0 0 auto 0; height:3px; background:linear-gradient(90deg,var(--brand),var(--brand2)); transform-origin:left; transform:scaleX(0); z-index:9999; box-shadow:var(--glow)}
+
+    .wrap{max-width:1100px; margin:80px auto; padding:0 20px;}
+
+    header{
+      display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:28px;
+    }
+    .title{
+      font-size: clamp(26px, 3vw, 36px); font-weight:800; letter-spacing:-0.02em;
+      background: linear-gradient(90deg, #fff, #bcd4ff 35%, #c9bfff 70%, #fff);
+      -webkit-background-clip:text; background-clip:text; color:transparent;
+      filter: drop-shadow(0 10px 30px rgba(130,110,255,.15));
+    }
+    .subtitle{color:var(--muted)}
+
+    .grid{
+      display:grid; gap:18px; grid-template-columns: repeat(12, 1fr);
+    }
+    .card{
+      grid-column: span 12; background: var(--card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 16px; padding: 18px; position:relative;
+      backdrop-filter: blur(10px);
+      box-shadow: var(--glow);
+      overflow:hidden;
+    }
+    .card::before{
+      content:""; position:absolute; inset:-1px; border-radius:18px; padding:1px;
+      background: conic-gradient(from 180deg at 50% 50%, rgba(123,97,255,.35), rgba(106,166,255,.35), rgba(255,255,255,.06), transparent 60%);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+      pointer-events:none;
+    }
+    .card h3{margin:0 0 12px; font-size:16px; letter-spacing:.2px}
+    .row{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+
+    /* 원형 진행도 (conic-gradient) */
+    .ring{
+      --size: 140px; --thick: 14px;
+      width:var(--size); aspect-ratio:1/1; position:relative; border-radius:50%;
+      background:
+              conic-gradient(var(--brand) var(--p), rgba(255,255,255,.06) 0);
+      display:grid; place-items:center; filter: drop-shadow(0 10px 40px rgba(106,166,255,.18));
+    }
+    .ring::before{
+      content:""; position:absolute; inset:calc(var(--thick) + 2px);
+      background: rgba(8,13,19,.8); border-radius:50%; backdrop-filter: blur(6px);
+    }
+    .ring .val{position:relative; font-weight:800; font-size:22px}
+    .ring .label{position:relative; margin-top:6px; color:var(--muted); font-size:12px}
+
+    /* 선형 진행도 (그라데이션 + 빗금 애니) */
+    .bar{--value:0; --height: 12px; width:100%; background: rgba(255,255,255,.06); border-radius:999px; position:relative; height:var(--height); overflow:hidden}
+    .bar>i{
+      position:absolute; inset:0 auto 0 0; width:calc(var(--value) * 1%);
+      background: linear-gradient(90deg,var(--brand),var(--brand2));
+      mask: repeating-linear-gradient(-60deg, #000 0 10px, #0000 10px 20px);
+      animation: sweep 1.2s linear infinite;
+    }
+    @keyframes sweep{to{mask-position:-200% 0}}
+
+    /* 스텝퍼 */
+    .stepper{display:flex; gap:14px; align-items:center}
+    .step{
+      --s: 30px; width:var(--s); height:var(--s); border-radius:50%; display:grid; place-items:center;
+      color:white; font-weight:700; position:relative; isolation:isolate;
+      background: linear-gradient(180deg, #2a3344, #1b2331);
+      border:1px solid rgba(255,255,255,.08);
+    }
+    .step.current{background:linear-gradient(180deg, #6aa6ff, #7b61ff); box-shadow:0 0 0 6px rgba(123,97,255,.18)}
+    .step.done{background:linear-gradient(180deg, #1f8f4a, #137c3a)}
+    .step+.line{flex:1; height:6px; background:rgba(255,255,255,.08); border-radius:999px; position:relative}
+    .step+.line>i{position:absolute; inset:0; width:var(--pct,0%); background:linear-gradient(90deg, #6aa6ff, #7b61ff); border-radius:999px}
+
+    /* 미니 스파크라인 (SVG) */
+    .spark{width:160px; height:48px}
+
+    /* 액션 버튼 */
+    .actions{display:flex; gap:10px; margin-left:auto}
+    .btn{cursor:pointer; padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,.08); color:#fff; background:#141b26; backdrop-filter: blur(8px)}
+    .btn.primary{background:linear-gradient(90deg,var(--brand),var(--brand2)); border-color:transparent; box-shadow:var(--glow)}
+
+    /* 리스트 스타일 진행 (칩) */
+    .pill{display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08)}
+    .pill i{width:8px; height:8px; border-radius:50%}
+
+    /* 툴팁 */
+    .tip{position:relative}
+    .tip:hover::after{content:attr(data-tip); position:absolute; bottom:120%; left:50%; transform:translateX(-50%);
+      background:#0b0f14; color:#dfe8ff; padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.08); white-space:nowrap; font-size:12px}
+
+    /* 카드 레이아웃 */
+    .span-6{grid-column:span 12}
+    @media(min-width:900px){
+      .span-6{grid-column: span 6}
+    }
+  </style>
+</head>
+<body>
+<div class="scroll-progress" id="scrollProgress"></div>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="title">진행도, 이렇게만 하면 간지 납니다 ✨</div>
+      <div class="subtitle">conic-gradient, glassmorphism, micro-interaction으로 꾸민 HTML/CSS/JS 스니펫</div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="randomize">랜덤 진행</button>
+      <button class="btn primary" id="demoPlay">데모 재생</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- 원형 진행도 카드 -->
+    <section class="card span-6">
+      <h3>원형 진행도 (Conic Ring)</h3>
+      <div class="row">
+        <div class="ring tip" id="ringA" data-tip="메인 태스크 진행률">
+          <div class="val" id="ringAVal">68%</div>
+          <div class="label">Main Task</div>
+        </div>
+        <div class="ring tip" id="ringB" style="--size:110px; --thick:12px" data-tip="서브 태스크 진행률">
+          <div class="val" id="ringBVal">42%</div>
+          <div class="label">Sub Task</div>
+        </div>
+        <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-label="sparkline">
+          <defs>
+            <linearGradient id="g1" x1="0" x2="1">
+              <stop offset="0" stop-color="#6aa6ff"/><stop offset="1" stop-color="#7b61ff"/>
+            </linearGradient>
+          </defs>
+          <path id="sparkline" d="M0 20 L10 18 L20 22 L30 12 L40 16 L50 10 L60 14 L70 9 L80 12 L90 6 L100 8" fill="none" stroke="url(#g1)" stroke-width="2" />
+        </svg>
+      </div>
+    </section>
+
+    <!-- 선형 진행도 카드 -->
+    <section class="card span-6">
+      <h3>선형 진행도 (Striped Gradient)</h3>
+      <div class="row" style="width:100%">
+        <div style="flex:1">
+          <div class="pill" style="margin-bottom:10px"><i style="background:var(--ok)"></i> 배포 준비</div>
+          <div class="bar tip" id="barDeploy" data-tip="배포 파이프라인">
+            <i></i>
+          </div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px; width:100%">
+        <div style="flex:1">
+          <div class="pill" style="margin-bottom:10px"><i style="background:var(--warn)"></i> 테스트 커버리지</div>
+          <div class="bar tip" id="barTest" data-tip="테스트 커버리지">
+            <i></i>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 스텝퍼 카드 -->
+    <section class="card span-6">
+      <h3>스텝 진행 (Stepper)</h3>
+      <div class="stepper" style="margin:10px 0">
+        <div class="step done">1</div>
+        <div class="line"><i style="--pct:100%"></i></div>
+        <div class="step current">2</div>
+        <div class="line" id="stepLine"><i style="--pct:40%"></i></div>
+        <div class="step">3</div>
+        <div class="line"><i style="--pct:0%"></i></div>
+        <div class="step">4</div>
+      </div>
+    </section>
+
+    <!-- 리스트형 진행 & 상태칩 카드 -->
+    <section class="card span-6">
+      <h3>상태칩 + 미세 상호작용</h3>
+      <div class="row">
+        <div class="pill tip" data-tip="큐 대기 중"><i style="background:var(--warn)"></i> Queueing</div>
+        <div class="pill tip" data-tip="실행 중"><i style="background:linear-gradient(90deg,var(--brand),var(--brand2))"></i> Running</div>
+        <div class="pill tip" data-tip="성공"><i style="background:var(--ok)"></i> Succeeded</div>
+        <div class="pill tip" data-tip="실패"><i style="background:var(--err)"></i> Failed</div>
+      </div>
+      <div style="height:14px"></div>
+      <div class="row">
+        <div style="min-width:220px; flex:1">
+          <div class="bar" id="barMini"><i></i></div>
+        </div>
+        <div style="opacity:.7">ETA <span id="eta">--:--</span></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+  // 스크롤 진행바
+  const sp = document.getElementById('scrollProgress');
+  const updateScroll = () => {
+    const t = document.documentElement; const ratio = t.scrollTop / (t.scrollHeight - t.clientHeight);
+    sp.style.transform = `scaleX(${ratio})`;
+  };
+  document.addEventListener('scroll', updateScroll, {passive:true});
+  updateScroll();
+
+  // 유틸
+  const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+  const setRing = (el, val) => { el.style.setProperty('--p', `${val*3.6}deg`); };
+  const setBar = (el, val) => { el.style.setProperty('--value', val); };
+
+  // 초기값
+  let ringA = 68, ringB = 42, deploy = 80, test = 45, mini = 10;
+  const elRingA = document.getElementById('ringA');
+  const elRingB = document.getElementById('ringB');
+  const elRingAVal = document.getElementById('ringAVal');
+  const elRingBVal = document.getElementById('ringBVal');
+  const elBarDeploy = document.getElementById('barDeploy');
+  const elBarTest = document.getElementById('barTest');
+  const elBarMini = document.getElementById('barMini');
+  const elETA = document.getElementById('eta');
+
+  function refresh(){
+    setRing(elRingA, ringA); elRingAVal.textContent = `${ringA}%`;
+    setRing(elRingB, ringB); elRingBVal.textContent = `${ringB}%`;
+    setBar(elBarDeploy, deploy); setBar(elBarTest, test); setBar(elBarMini, mini);
+    elETA.textContent = `${String(Math.floor((100-mini)/2)).padStart(2,'0')}:${String(((100-mini)%2)*30).padStart(2,'0')}`;
+  }
+  refresh();
+
+  // 랜덤 진행 버튼
+  document.getElementById('randomize').addEventListener('click', () => {
+    ringA = Math.floor(Math.random()*101); ringB = Math.floor(Math.random()*101);
+    deploy = Math.floor(Math.random()*101); test = Math.floor(Math.random()*101); mini = Math.floor(Math.random()*101);
+    refresh();
+  });
+
+  // 데모 재생: 천천히 증가 애니메이션
+  let demoTimer = null;
+  document.getElementById('demoPlay').addEventListener('click', () => {
+    if(demoTimer){ cancelAnimationFrame(demoTimer); demoTimer = null; }
+    const start = performance.now();
+    const baseA = ringA, baseB = ringB, baseD = deploy, baseT = test, baseM = mini;
+    const dur = 4000; // 4s
+    const ease = t => 1 - Math.pow(1-t, 3);
+    const tick = now => {
+      const p = clamp((now - start)/dur, 0, 1); const e = ease(p);
+      ringA = Math.round(baseA + (100-baseA)*e);
+      ringB = Math.round(baseB + (85-baseB)*e);
+      deploy = Math.round(baseD + (100-baseD)*e);
+      test = Math.round(baseT + (82-baseT)*e);
+      mini = Math.round(baseM + (96-baseM)*e);
+      refresh();
+      if(p<1) demoTimer = requestAnimationFrame(tick);
+    };
+    demoTimer = requestAnimationFrame(tick);
+  });
+
+  // 접근성: 키보드로 값 조절 (ringA)
+  elRingA.tabIndex = 0; elRingA.addEventListener('keydown', e=>{
+    if(e.key==='ArrowRight') { ringA = clamp(ringA+5,0,100); refresh(); }
+    if(e.key==='ArrowLeft')  { ringA = clamp(ringA-5,0,100); refresh(); }
+  });
+</script>
+</body>
+</html>
